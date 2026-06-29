@@ -1,0 +1,422 @@
+# 소프트웨어 요구사항 명세서 (SRS)
+## Flood Escape Lab — 초등학생 대상 재난체험 학습게임
+
+**버전**: 1.4.0
+**작성일**: 2026-06-29
+**작성자**: daria.j.kim
+**상태**: 초안 (Draft)
+**변경사항**: 비주얼 톤 변경 — 어두운 다크 테마 → 밝은 교육용 일러스트 스타일 (초등 저학년 대상 친화적 디자인으로 전환)
+
+---
+
+## 1. 서론 (Introduction)
+
+### 1.1 목적 (Purpose)
+
+본 문서는 초등학생 대상 웹 기반 재난체험 학습게임 **Flood Escape Lab**의 소프트웨어 요구사항을 정의한다.
+
+기존 기후·재난 안전교육은 영상 시청·텍스트 읽기 중심의 수동적 콘텐츠로, 학생들이 "50mm/h"와 같은 기상 수치를 실제 위험으로 체감하지 못하는 한계가 있다. 본 서비스는 학생이 **직접 변수를 조작**하고 그 결과를 즉시 확인함으로써, 숫자를 실제 위험으로 번역하는 능력을 게임을 통해 체득하게 한다.
+
+개발자, QA, 기획자가 시스템을 설계·구현·검증하는 과정에서 참조하며, Playwright 자동화 테스트의 검증 기준으로도 활용된다.
+
+> **공모전 연계**: 기상청·기후에너지환경부 주관 「기상·기후 AI 해커톤 2026」 출품작.
+> 평가기준 중 **체험·참여형 설계(25점) + 실현 가능성(30점)** = 55점 항목을 핵심 타깃으로 설계.
+
+### 1.2 범위 (Scope)
+
+- **서비스명**: Flood Escape Lab
+- **대상 사용자**: 초등학생 (학교 수업 중 활용)
+- **핵심 기능**:
+  - 지하차도 집중호우 시나리오 기반 침수 시뮬레이션
+  - 예산 내 방재 장비 선택 → 결과 변화 직접 체험
+  - 실시간 침수 수위 시각화 (SVG 애니메이션)
+  - 결과 등급(S/A/B/C/F) + 학습 포인트 메시지 제공
+- **핵심 교육 목표**:
+  - 같은 50mm/h라도 장비 조합에 따라 침수 결과가 완전히 달라짐을 체험
+  - 방재시설은 영구 방어가 아니라 **시간을 버는 장치**임을 이해
+  - 기상 수치(mm)를 실제 위험으로 번역하는 능력 형성
+- **배포 환경**: 정적 웹 앱 (SPA), 모바일 우선(mobile-first) 반응형 UI, 학교 PC·태블릿 환경 대응
+
+### 1.3 정의 및 약어 (Definitions, Acronyms, Abbreviations)
+
+| 약어 / 용어 | 설명 |
+|------------|------|
+| SRS | Software Requirements Specification (소프트웨어 요구사항 명세서) |
+| SPA | Single Page Application |
+| FR | Functional Requirement (기능 요구사항) |
+| NFR | Non-Functional Requirement (비기능 요구사항) |
+| RTM | Requirements Traceability Matrix (요구사항 추적성 매트릭스) |
+| ASOS | Automated Synoptic Observing System — 기상청 종관기상관측장비 |
+| KMA | Korea Meteorological Administration — 기상청 |
+| API Hub | 기상청 공식 API 허브 (apihub.kma.go.kr) |
+| 공공데이터포털 | 행정안전부 공공데이터 개방 플랫폼 (data.go.kr) |
+| Vercel API Route | Vercel 서버리스 함수 — CORS 프록시 및 API 키 보관 역할 |
+| 침수 수위 | 지하차도 내 물의 높이 (단위: cm, 최대 280cm) |
+| 경보 수위 | 30cm — 위험 경보 발령 기준선 |
+| 위험 수위 | 60cm — 차량·보행자 위험 임계선 |
+| 등급 | 시뮬레이션 결과 평가: S > A > B > C > F |
+| 대피율 | 전체 재실자(50명) 중 탈출 성공 인원 비율 (%) |
+| 곡선 유형 | 시뮬레이션 수위 상승 패턴 (FLAT / SURGE / SPIKE / OVERFLOW) |
+| 방재 장비 | 침수 대응 장비 4종: 물막이판·배수펌프·경보시스템·탈출사다리 |
+| 학습 포인트 | 결과 화면의 등급별 교육 메시지 섹션 |
+
+### 1.4 참조 문서 (References)
+
+- IEEE 830-1998: Software Requirements Specification 표준
+- ISO/IEC/IEEE 29148:2018: Requirements Engineering
+- [T15]SRS (1).pdf — 사내 SRS 레퍼런스 예시
+- 기상·기후 AI 해커톤 2026 공모요강: https://weatherhackathon.kr/
+- 초등학생의 기후변화 대응 행동의도와 관련된 변인 탐색 (KCI, 2020)
+- 학교 기후환경교육 지원 방안 (교육부·기상청·환경부 합동, 2022)
+- Playwright 공식 문서: https://playwright.dev
+- Zustand 공식 문서: https://zustand.docs.pmnd.rs
+
+---
+
+## 2. 전체 설명 (Overall Description)
+
+### 2.1 제품 관점 (Product Perspective)
+
+Flood Escape Lab은 React SPA + Vercel 서버리스 함수로 구성된 **2-tier 웹 애플리케이션**이다.
+
+- **프론트엔드 (SPA)**: 브라우저에서 실행되는 React UI + 로컬 시뮬레이션 엔진. 기본 동작은 오프라인에서도 가능하다.
+- **백엔드 (Vercel API Route)**: `api/scenario.ts` 서버리스 함수가 CORS 프록시 역할을 수행한다. 기상청 API 키를 환경변수(`KMA_SERVICE_KEY`)로 보관하고, 브라우저의 요청을 받아 기상청 ASOS API에 중계한 뒤 결과를 반환한다.
+- **기상청 ASOS API**: 과거 실제 집중호우 사건(2022 강남, 2023 오송, 2020 부산 초량)의 시간당 강우량 데이터를 제공한다. 게임 시작 시 로비 화면에서 시나리오를 불러온다.
+
+```
+[학생 브라우저 — 학교 PC / 태블릿]
+    │
+    ├─ React UI Layer (4 화면: Lobby / Equipment / Play / Result)
+    │       └─ 로비 진입 시 → Vercel API Route로 시나리오 요청
+    │
+    ├─ Zustand Store (전역 상태: screen, budget, purchased, simResult, result, scenario)
+    │       └─ localStorage persist (flood-game-store)
+    │
+    ├─ 시뮬레이션 엔진 (engine.ts)
+    │       ├─ 입력: SimulationConfig (강우량, 하천범람, 펌프, 물막이, 시나리오)
+    │       ├─ 출력: WaterLevelPoint[], maxWaterLevel, warningReachedAt, grade
+    │       └─ 곡선 유형: FLAT / SURGE / SPIKE / OVERFLOW
+    │
+    └─ [Vercel API Route — api/scenario.ts]
+            ├─ CORS 프록시: 브라우저 → Vercel → 기상청 ASOS API
+            ├─ 환경변수: KMA_SERVICE_KEY (Vercel 대시보드에서 관리)
+            ├─ 엔드포인트: GET /api/scenario?event=gangnam-2022
+            └─ 응답: { rainfall, date, location, description } JSON
+
+[기상청 ASOS API — apis.data.go.kr]
+    ├─ 서비스: AsosHourlyInfoService/getWthrDataList
+    ├─ 파라미터: stnIds (지점번호), startDt/endDt (YYYYMMDD), dateCd=HR
+    └─ 응답: 시간별 강수량(RN), 강수강도(RN_INT) JSON
+```
+
+### 2.2 제품 기능 요약 (Product Functions)
+
+1. **로비(Lobby)**: 오늘의 재난 미션 카드 + 시나리오 안내, 게임 진입점
+2. **장비 선택(Equipment)**: 500원 예산 내 4종 방재 장비 구매·반납 — 조합에 따라 결과가 달라짐을 예고
+3. **플레이(Play)**: 28초 침수 시뮬레이션 애니메이션 + 실시간 수위·위험도·대피인원 상태 패널
+4. **결과(Result)**: 등급·대피율·학습 포인트 메시지·배지 표시, 재도전으로 변수 재실험 유도
+
+### 2.3 사용자 특성 (User Characteristics)
+
+| 사용자 유형 | 특성 | UI 요구 사항 |
+|-----------|------|------------|
+| **초등학생 (주 사용자)** | IT 기초 능력 보유, 게임 UI에 익숙, 재난 개념 학습 중 | 직관적 아이콘·색상, 짧은 텍스트(초등 1~2학년 수준), 즉각적 시각 피드백 |
+| 초등학교 교사 (보조 사용자) | 수업 중 도구로 활용, 설명 시간 최소화 필요 | URL 하나로 즉시 실행, 별도 설치·설정 없음 |
+
+- 별도 로그인/회원가입 없음
+- 한국어 단일 언어 지원
+- **단일 웹 URL 모드**: 교사 빔프로젝터 시연과 학생 개인 기기 플레이 모두 동일한 웹페이지로 진행. 별도 모드 구분 없음
+
+### 2.4 제약 조건 (Constraints)
+
+- **운영 환경**: 모던 웹 브라우저 (Chrome 100+, Safari 15+, Edge 100+) — 학교 PC 환경 기준
+- **뷰포트**: 모바일 우선 (390px 기준), 최대 너비 512px (max-w-lg), 태블릿·PC 모두 대응
+- **네트워크**: 로비 시나리오 로딩 시 인터넷 연결 필요 (기상청 API 호출). API 실패 시 내장 폴백 시나리오로 자동 전환하여 수업 진행 가능 — 학교 네트워크 불안정 대비
+- **API 키 관리**: 기상청 API 키(`KMA_SERVICE_KEY`)는 Vercel 환경변수로만 보관. 클라이언트 번들에 노출 금지
+- **CORS**: 기상청 ASOS API는 브라우저 직접 호출 시 CORS 차단됨. Vercel API Route(`api/scenario.ts`)를 서버사이드 프록시로 반드시 경유
+- **API 호출 쿼터**: 공공데이터포털 개발계정 기준 10,000건/일. 게임 세션당 1회 호출 설계로 여유 확보
+- **상태 저장**: localStorage 단일 키 (`flood-game-store`) — 수업 중 새로고침 시 상태 유지
+- **빌드**: Vite 8 + TypeScript 6 strict mode
+- **스타일**: Tailwind CSS v4 (JIT)
+- **개발 플랫폼**: Lovable — AI 기반 웹 개발 플랫폼. React SPA 코드 생성 및 실시간 프리뷰 제공
+- **배포**: Vercel (서버리스 함수 지원 필수) — Lovable에서 생성된 코드를 Vercel로 배포. `api/scenario.ts` 서버리스 함수가 Vercel에서 실행되므로 기상청 API 키 보안 및 CORS 해결이 이 단계에서 완성됨
+- **개발 → 배포 → 검증 플로우**:
+  ```
+  Lovable (프로토타입 생성)
+      → Vercel 배포 (api/scenario.ts 포함 — 기상청 API 키 보관 + CORS 해결)
+          → 기상청 ASOS API 연동 (실제 과거 침수 데이터 주입)
+              → Playwright MCP (브라우저 자동 테스트 + 시나리오 검증)
+  ```
+- **개발 서버**: `vercel dev`(localhost:3000) 단일 기준. 프론트엔드 + API Route 동시 실행. `vite dev`(5173)는 API 연동이 불필요한 순수 UI 작업에만 한정 사용. 두 환경 충돌 시 `vercel dev` 우선
+- **E2E 테스트 기준 URL**: `http://localhost:3000` (`vercel dev` 환경)
+- **법규**: 아동 개인정보 수집 없음, 별도 회원가입 없음, 개인정보보호법 적용 대상 아님
+- **공공데이터 이용**: 공공누리 1유형 — 서비스 내 "데이터 출처: 기상청" 표기 의무
+
+### 2.5 가정 및 의존성 (Assumptions and Dependencies)
+
+- JavaScript(ES2022+) 활성화된 브라우저에서 실행됨을 가정
+- 시뮬레이션 엔진은 결정론적(deterministic) 계산 — 동일 장비 조합은 항상 동일 결과 (수업 재현성 보장)
+- 기상청 ASOS API에서 받은 강우량 데이터를 engine.ts의 `rainfall` 파라미터에 동적 주입하여 시나리오 구성. 고정값(50mm/h) 가정 삭제
+- API 응답 실패 시 내장 폴백 시나리오 3종(gangnam-2022: 141mm/h, osong-2023: 90mm/h, busan-2020: 80mm/h)으로 자동 전환
+- 시나리오 설정(사건명·지점번호·폴백 강우량)은 `scenarios.config.ts`로 분리 관리. engine.ts 또는 API Route에 하드코딩하지 않음
+- 단일 웹 URL로 접속하면 교사·학생 구분 없이 동일한 게임을 이용함을 가정
+- Playwright E2E 테스트는 **`vercel dev`(`http://localhost:3000`)** 기준으로 실행
+- Vercel 배포 환경에서 `KMA_SERVICE_KEY` 환경변수가 설정되어 있음을 가정
+- 기상청 ASOS 지점번호: 서울(108), 부산(159), 세종/청주(131) — 각 사건 위치 기준
+- API는 세션당 1회 호출(로비 진입 시)로 설계 — 일일 쿼터(10,000건) 문제 없음
+
+---
+
+## 3. 기능 요구사항 (Functional Requirements)
+
+| ID | 요구사항 설명 | 우선순위 | 비고 |
+|----|-------------|---------|------|
+| FR-01 | 학생은 로비 화면에서 오늘의 재난 미션 정보를 확인하고 "PLAY" 버튼으로 게임을 시작할 수 있어야 한다. | Must | 게임 진입점 |
+| FR-02 | 장비 선택 화면은 총 예산 500원과 4종 장비(물막이판·배수펌프·경보시스템·탈출사다리)의 이름·비용·효과를 명확히 표시해야 한다. | Must | 초등생 가독성 |
+| FR-03 | 잔여 예산이 부족한 경우 해당 장비 구매 버튼이 비활성화되어야 한다. | Must | 예산 초과 방지 |
+| FR-04 | 구매한 장비를 반납하여 예산을 복구할 수 있어야 한다. | Must | 전략 수정 허용 |
+| FR-05 | 장비 없이도 게임을 시작할 수 있어야 한다. (무방비 체험으로 위험성 학습) | Must | 결과: 낮은 등급 |
+| FR-06 | 게임 시작 시 선택한 장비 조합에 따라 침수 시뮬레이션이 즉시 계산되어야 한다. | Must | engine.ts |
+| FR-07 | 플레이 화면은 SVG 기반 지하차도 단면도에 침수 수위를 실시간 애니메이션으로 표시해야 한다. | Must | 28초 재생 |
+| FR-08 | 플레이 화면은 남은 시간, 현재 수위(cm), 위험도(LOW/MED/HIGH/CRITICAL), 대피 인원을 실시간 표시해야 한다. | Must | 상태 패널 |
+| FR-09 | 수위 30cm 도달 시 경고선(주황), 60cm 도달 시 위험선(빨강)을 SVG에 표시하여 기준 수위의 의미를 시각화해야 한다. | Must | 수치의 시각화 |
+| FR-10 | 스킬 버튼은 구매한 장비에 해당하는 것만 활성화되어야 한다. (미구매 장비 = 회색 비활성) | Should | 인과관계 체험 |
+| FR-11 | 결과 화면은 등급(S/A/B/C/F), 대피 성공률(%), 최고 수위(cm), 경고 도달 시간을 표시해야 한다. | Must | 결과 정량화 |
+| FR-12 | 결과 화면은 조건에 따른 배지(빠른 경보·펌프 마스터·하천범람 생존자·맨몸 탈출·알뜰 구조대)를 표시해야 한다. | Should | 성취감 제공 |
+| FR-13 | 결과 화면은 등급별 학습 포인트 메시지와 수위 곡선 유형을 표시하여 게임 결과를 교육 내용과 연결해야 한다. | Must | 핵심 교육 기능 |
+| FR-14 | "다시 도전" 버튼으로 상태를 초기화하고 로비로 돌아가 다른 장비 조합을 실험할 수 있어야 한다. | Must | 반복 실험 유도 |
+| FR-15 | "장비 바꿔서 재도전" 버튼으로 장비 선택 화면에서 조합만 바꿔 재시도할 수 있어야 한다. | Should | 비교 학습 |
+| FR-16 | 게임 상태는 localStorage에 자동 저장·복원되어 수업 중 새로고침 시에도 진행 상태를 유지해야 한다. | Should | 수업 환경 대응 |
+| FR-17 | 로비 화면 진입 시 Vercel API Route(`GET /api/scenario`)를 통해 기상청 ASOS 과거 강우량 데이터를 불러와 오늘의 시나리오로 표시해야 한다. | Must | 실제 기상 데이터 연동 |
+| FR-18 | API 호출 실패(네트워크 오류, 기상청 서버 장애, 쿼터 초과) 시 내장 폴백 시나리오(gangnam-2022)로 자동 전환하고, 사용자에게 "오늘은 2022년 강남 집중호우 시나리오로 체험합니다" 메시지를 표시해야 한다. | Must | 수업 안정성 |
+| FR-19 | 로비 화면은 시나리오 카드에 실제 사건명(예: "2022 강남 집중호우")·날짜·강우량(mm/h)·피해 규모를 표시하여 역사적 맥락을 제공해야 한다. | Should | 공모전 주제 적합성 |
+| FR-20 | 로비 또는 결과 화면에 "데이터 출처: 기상청(data.go.kr)" 표기를 포함해야 한다. | Must | 공공누리 1유형 의무 |
+| FR-21 | 로비 화면은 게임 목적을 초등 1~2학년도 이해할 수 있는 한 줄 문장(이모지 보조)으로 즉시 전달해야 한다. 별도 튜토리얼 화면 없이 로비 자체가 온보딩 역할을 한다. | Must | 온보딩, 저학년 접근성 |
+
+---
+
+## 4. 비기능 요구사항 (Non-functional Requirements)
+
+| ID | 요구사항 설명 | 기준치 | 비고 |
+|----|-------------|-------|------|
+| NFR-01 | 시뮬레이션 계산 응답시간 | 200ms 이내 | engine.ts 동기 연산 |
+| NFR-02 | 플레이 화면 애니메이션 프레임률 | 60fps 유지 | requestAnimationFrame 기반 |
+| NFR-03 | 초기 번들 크기 | 250KB 이하 (gzip) | Vite 트리쉐이킹 적용 |
+| NFR-04 | 최초 화면 로드(FCP) | 1.5초 이내 | 학교 인터넷 환경 고려 |
+| NFR-05 | 태블릿(768px) / 모바일(390px) 레이아웃 | 전 화면 깨짐 없음 | 학교 기기 다양성 대응 |
+| NFR-06 | 브라우저 호환성 | Chrome 100+, Safari 15+, Edge 100+ | 학교 PC 표준 환경 |
+| NFR-07 | TypeScript strict 모드 | 빌드 오류 0개 | tsc -b 통과 |
+| NFR-08 | E2E 테스트 전체 통과율 | 10/10 (100%) | Playwright game.spec.ts |
+| NFR-09 | E2E 테스트 총 실행시간 | 30초 이내 | headless 모드 |
+| NFR-10 | 네트워크 장애 대응 | API 실패 시 3초 이내 폴백 시나리오 전환, 게임 중단 없음 | 학교 Wi-Fi 불안정 대비 |
+| NFR-11 | 텍스트 난이도 | **초등 1~2학년** 수준 어휘 기준. 한자어·영어 약어 없이, 한 문장에 한 가지 정보 | 저학년 포함 전체 초등생 대응 |
+| NFR-12 | Vercel API Route 응답시간 | 2초 이내 (기상청 API 호출 포함). 초과 시 로비에 로딩 스피너 표시 | Cold Start 포함 |
+| NFR-13 | API 키 보안 | `KMA_SERVICE_KEY`는 Vercel 환경변수에만 보관, 클라이언트 번들 미노출 | 빌드 산출물 검사 필수 |
+| NFR-14 | 온보딩 접근성 | 로비 진입 후 3초 이내 PLAY 버튼 발견 가능한 구조. 설명 텍스트 없이 아이콘·색상만으로도 행동 유도 가능 | 초등 저학년 UX 기준 |
+
+---
+
+## 5. 외부 인터페이스 요구사항
+
+### 5.1 사용자 인터페이스 (UI/UX)
+
+- **레이아웃**: 단일 컬럼, 중앙 정렬, 최대 너비 512px (max-w-lg)
+- **비주얼 톤**: 밝고 친근한 교육용 일러스트 스타일. 초등 1~2학년이 공포감 없이 몰입할 수 있도록 밝은 배경 기반으로 설계. 긴박감은 색상이 아닌 애니메이션·사운드·수위 게이지로 표현.
+- **색상 팔레트** (위험도 직관적 인지 설계):
+  - 배경: `#EFF6FF` (하늘 파랑) / 카드: `#FFFFFF` / 테두리: `#BFDBFE`
+  - 텍스트: `#1E3A5F` (진한 파랑)
+  - 강조 블루: `#1F6FEB` — 안전·정보
+  - 성공 그린: `#22C55E` — 대피 성공
+  - 경고 오렌지: `#FF8C00` — 주의 수위 (30cm)
+  - 위험 레드: `#FF3B30` — 위험 수위 (60cm+)
+  - 금색: `#FFD700` — S등급
+- **캐릭터**: 노란 우비 캐릭터 일러스트 사용. 단면도 형식(지상/지하 레이어 구분)으로 침수 상황 시각화.
+- **수위 게이지**: 우측 세로 바 형태로 시각적 표시 (0cm~100cm)
+- **아이콘**: 이모지 기반 장비 표현 (🚧 물막이판 / ⚙️ 배수펌프 / 🚨 경보시스템 / 🪜 탈출사다리)
+- **화면 전환**: Zustand `screen` 상태 기반 조건부 렌더링 (라우터 없음)
+- **접근성**: 버튼 역할(role=button), 비활성 상태(disabled) 시각적 명확히 표기
+- **온보딩 텍스트 기준**: 폰트 최소 16px, 문장 1개당 15자 이내 권장, 이모지 필수 보조, 한자어·영어 약어 금지
+- **출처 표기**: "데이터 출처: 기상청" 문구를 로비 하단 또는 결과 화면에 고정 표시
+
+### 5.2 하드웨어 인터페이스
+
+- **클라이언트**: 학교 PC(Windows), 태블릿(Android/iPad), 스마트폰(iOS/Android)
+- **최소 화면**: 375px 너비 이상
+- **입력 장치**: 터치스크린, 마우스/키보드 모두 지원
+
+### 5.3 소프트웨어 인터페이스
+
+| 컴포넌트 | 기술 | 버전 |
+|---------|------|------|
+| UI 프레임워크 | React | ^19.2.7 |
+| 빌드 도구 | Vite | ^8.1.0 |
+| 언어 | TypeScript | ~6.0.2 |
+| CSS | Tailwind CSS v4 | ^4.3.1 |
+| 상태 관리 | Zustand (persist) | ^5.0.14 |
+| 차트 (예비) | Recharts | ^3.9.0 |
+| E2E 테스트 | Playwright | ^1.61.1 |
+| 개발 플랫폼 | Lovable | — |
+| 배포 플랫폼 | Vercel | CLI v54+ |
+| 서버리스 함수 | Vercel API Route (Node.js) | — |
+| 외부 데이터 | 기상청 ASOS API (공공데이터포털) | — |
+
+### 5.4 통신 인터페이스
+
+#### 기상청 ASOS API (서버사이드 경유 필수)
+
+| 항목 | 내용 |
+|------|------|
+| 서비스명 | 기상청_지상(종관, ASOS) 시간자료 조회서비스 |
+| 출처 | 공공데이터포털 (data.go.kr) |
+| 엔드포인트 | `http://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList` |
+| 인증 | `ServiceKey` 쿼리 파라미터 (공공데이터포털 발급, Vercel 환경변수 보관) |
+| 주요 파라미터 | `dataCd=ASOS`, `dateCd=HR`, `startDt` (YYYYMMDD), `startHh` (HH), `stnIds` (지점번호) |
+| 응답 형식 | JSON (`dataType=JSON` 지정) |
+| 핵심 응답 필드 | `rn` (강수량 mm), `rnInt` (강수강도 mm/h) |
+| 호출 제한 | 개발계정 10,000건/일 |
+| CORS | 브라우저 직접 호출 차단 — Vercel API Route 경유 필수 |
+
+**과거 집중호우 사건 지점 정보**
+
+| 사건명 | 날짜 | ASOS 지점번호 | 최대 강우량 |
+|--------|------|------------|-----------|
+| 2022 강남 집중호우 | 2022-08-08 | 108 (서울) | 141.5 mm/h |
+| 2023 오송 지하차도 침수 | 2023-07-15 | 131 (청주) | 90 mm/h |
+| 2020 부산 초량 지하차도 | 2020-07-23 | 159 (부산) | 80 mm/h |
+
+#### Vercel API Route (`api/scenario.ts`)
+
+| 항목 | 내용 |
+|------|------|
+| 엔드포인트 | `GET /api/scenario?event={event-id}` |
+| 역할 | CORS 프록시 + API 키 보호 |
+| 환경변수 | `KMA_SERVICE_KEY` (Vercel 대시보드 설정) |
+| 응답 | `{ rainfall: number, date: string, location: string, description: string }` |
+| 폴백 | 기상청 API 오류 시 내장 하드코딩 데이터 반환 |
+
+#### 기타
+
+- **상태 저장소**: `window.localStorage` (키: `flood-game-store`)
+- **개발 서버**: `http://localhost:3000` (`vercel dev` — 프론트엔드 + API Route 동시 실행)
+- **테스트 환경 노출**: `window.__gameStore` (DEV 모드 한정, 프로덕션 제외)
+
+---
+
+## 6. 시스템 아키텍처 개요
+
+```
+[초등학생 / 교사]
+       │ URL 접속 (브라우저)
+       ▼
+[브라우저 SPA — React + Vite]
+   │
+   ├──[App.tsx] ── screen 상태에 따라 4화면 분기
+   │       ├── LobbyScreen.tsx       — 미션 소개, 시나리오 카드, 게임 진입
+   │       │       └── 진입 시 → GET /api/scenario 요청 (기상청 데이터 로딩)
+   │       ├── EquipmentScreen.tsx   — 장비 선택 (변수 조작)
+   │       ├── PlayScreen.tsx        — 침수 시뮬레이션 (결과 체험)
+   │       └── ResultScreen.tsx      — 등급 + 학습 포인트
+   │
+   ├──[gameStore.ts (Zustand + persist)]
+   │       ├── 상태: screen / budget / purchased / simResult / result / scenario
+   │       ├── 액션: buyEquipment / sellEquipment / startPlay / finishGame / reset / setScenario
+   │       └── localStorage ↔ flood-game-store
+   │
+   ├──[engine.ts — 침수 시뮬레이션 엔진]
+   │       ├── 입력: SimulationConfig
+   │       │         { rainfall, rainPattern, riverOverflow, pumpStatus, barrierInstalled, spaceType, depth }
+   │       │         ※ rainfall 값은 기상청 API 또는 폴백 시나리오에서 주입
+   │       ├── 처리: 600 시뮬레이션 초 × 수위 계산 → WaterLevelPoint[]
+   │       └── 출력: SimulationResult { curve, maxWaterLevel, warningReachedAt, grade, curveShape }
+   │
+   └──[api/ — Vercel 서버리스 함수]
+           └── scenario.ts
+                   ├── GET /api/scenario?event=gangnam-2022|osong-2023|busan-2020
+                   ├── KMA_SERVICE_KEY (환경변수) → 기상청 ASOS API 중계
+                   ├── 응답: { rainfall, date, location, description }
+                   └── 폴백: 기상청 API 오류 시 하드코딩 데이터 반환
+
+[기상청 ASOS API — apis.data.go.kr]
+   └── AsosHourlyInfoService/getWthrDataList
+           ├── stnIds: 108(서울)/131(청주)/159(부산)
+           └── 응답: rn(강수량), rnInt(강수강도 mm/h)
+```
+
+**등급 산출 로직 (교육적 인과관계 설계)**:
+
+```
+대피율 = 기본값(시뮬 등급 기반) + alarm 보너스(+15%) + ladder 보너스(+10%)
+
+S: 대피율 ≥ 90% AND 경보도달 ≤ 60초   → "경보 시스템이 시간을 앞당겼다"
+A: 대피율 ≥ 75% AND 경보도달 ≤ 120초  → "배수펌프가 수위 상승을 늦췄다"
+B: 대피율 ≥ 55%                       → "물막이판이 초반 유입을 막았다"
+C: 대피율 ≥ 30%                       → "무방비 상태의 빠른 수위 상승"
+F: 그 외                               → "하천범람+펌프 고장 = 급격한 상승"
+```
+
+---
+
+## 7. 요구사항 추적성 매트릭스 (RTM)
+
+| 요구사항 ID | 테스트 케이스 ID | 테스트 설명 | 결과 |
+|-----------|--------------|-----------|------|
+| FR-01 | TC-01 | Lobby — PLAY 버튼·미션 카드 가시성 확인 | ✅ PASS |
+| FR-02 | TC-02 | Equipment — 예산바·4종 장비카드·효과 설명 렌더링 | ✅ PASS |
+| FR-03 | TC-05 | 예산 초과 시 구매 버튼 비활성화 확인 | ✅ PASS |
+| FR-04 | TC-06 | 장비 반납 후 예산 복구 확인 | ✅ PASS |
+| FR-05 | TC-07 | 무장비 게임 시작 → 낮은 등급 확인 | ✅ PASS |
+| FR-06 | TC-07, TC-08 | 장비 조합별 시뮬레이션 결과 차이 검증 | ✅ PASS |
+| FR-07 | TC-03 | Play — SVG 침수맵 렌더링 확인 | ✅ PASS |
+| FR-08 | TC-03 | Play — 타이머·수위·위험도·대피인원 패널 확인 | ✅ PASS |
+| FR-10 | TC-03 | 스킬 버튼 활성/비활성 상태 확인 | ✅ PASS |
+| FR-11 | TC-04 | Result — 등급·통계·교육 메시지 렌더링 | ✅ PASS |
+| FR-12 | TC-08 | 배지(빠른 경보 등) 표시 확인 | ✅ PASS |
+| FR-13 | TC-04 | 학습 포인트 섹션·곡선 유형 렌더링 확인 | ✅ PASS |
+| FR-14 | TC-09 | 다시 도전 → Lobby, 상태 초기화 확인 | ✅ PASS |
+| FR-15 | TC-10 | 장비 바꿔서 재도전 → Equipment 화면 이동 | ✅ PASS |
+| NFR-08 | TC-01~TC-10 | E2E 전체 10/10 통과 | ✅ PASS |
+| NFR-09 | TC-01~TC-10 | 전체 실행 13.3초 (기준 30초 이내) | ✅ PASS |
+
+**테스트 파일 위치**: `tests/game.spec.ts`
+**최근 실행 결과**: 10/10 PASS, 13.3s (2026-06-29)
+
+---
+
+## 8. 부록 (Appendices)
+
+### 8.1 용어집
+
+| 용어 | 초등학생 설명 | 기술적 정의 |
+|------|------------|-----------|
+| 집중호우 | 짧은 시간에 엄청 많이 내리는 비 | 강우량 50mm/h 이상의 단시간 강수 |
+| 하천범람 | 강물이 둑을 넘쳐 도로로 흘러들어오는 것 | 제방 초과로 하천수가 도로 유입 |
+| 지하차도 B1 | 땅 아래로 뚫린 차도 (지하 1층) | 지하 1층 도로, 최대 침수 깊이 280cm |
+| 경보 수위 | 위험해요! 빨리 대피하세요 신호 | 30cm — 경보 발령 기준선 |
+| 위험 수위 | 차도 잠김, 사람도 위험한 높이 | 60cm — 차량·보행자 위험 임계선 |
+| FLAT | 천천히 올라가는 수위 (그나마 안전) | 완만한 수위 상승 곡선 |
+| SURGE | 처음에 확 올라갔다가 느려지는 수위 | 급격한 초반 상승 후 완화 |
+| SPIKE | 갑자기 확 올라가는 수위 (위험) | 특정 구간 급등 후 유지 |
+| OVERFLOW | 계속 올라가서 가득 차는 최악 상황 | 지속 범람으로 최고 수위 도달 |
+| warningReachedAt | 경보 수위(30cm) 도달 시점 | 시뮬레이션 초 단위 float 값 |
+
+### 8.2 추가 제약사항
+
+- **프로덕션 배포 시**: `window.__gameStore` 노출 금지 (main.tsx의 DEV 조건부 블록 확인 필수)
+- **장비 조합 한계**: 총 예산 500원으로 4종 장비 전체(합계 750원) 동시 구매 불가 — 트레이드오프 의사결정 학습 의도
+- **시뮬레이션 동적 조건**: 기상청 API에서 불러온 `rainfall` 값이 engine.ts `SimulationConfig.rainfall`에 주입됨. 폴백 시 기본값 141mm/h(강남 2022) 적용
+- **Playwright 테스트 의존성**: `import.meta.env.DEV` 환경에서만 `window.__gameStore` 접근 가능 — 프로덕션 빌드에서는 E2E 스토어 접근 불가
+- **개발 서버 단일화**: 로컬 개발·E2E 테스트 모두 `vercel dev`(localhost:3000) 기준. `vite dev`(5173)는 API 연동 불필요한 UI 작업에만 한정. 충돌 시 `vercel dev` 우선
+- **`scenarios.config.ts`**: 사건명·ASOS 지점번호·날짜·폴백 강우량을 단일 설정 파일로 관리. `api/scenario.ts`와 engine.ts 모두 이 파일을 참조
+- **API 키 발급 절차**: data.go.kr 회원가입 → 기상청 ASOS 시간자료 조회서비스 신청 → ServiceKey 발급 (즉시 활성화)
+- **공공데이터 이용약관**: 기상청 제공 데이터는 공공누리 1유형(출처 표시) — 게임 내 "데이터 출처: 기상청" 표기 필요
+- **텍스트 검수 필요**: 초등학생 어휘 수준 맞춤 표현 최종 검수 권장 (교육 전문가 리뷰)
+
+### 8.3 공모전 적합성 체크리스트 (기상·기후 AI 해커톤 2026)
+
+| 평가항목 | 배점 | 대응 설계 | 충족 여부 |
+|---------|------|---------|---------|
+| 실현 가능성 | 30점 | 웹 기반 SPA + Vercel 배포, 별도 설치 없이 URL 하나로 즉시 실행 | ✅ |
+| 체험·참여형 설계 | 25점 | 장비 선택 → 결과 변화 직접 체험, 변수 조작 반복 가능 | ✅ |
+| 주제 적합성 | 20점 | 기상청 ASOS 실제 과거 집중호우 데이터 (2022 강남 141mm/h 등) 기반 시나리오 + 출처 표기 | ✅ |
+| 아이디어 독창성 | 15점 | 실제 기상 데이터 × 방재 장비 조합 × 예산 제약 × 등급 피드백 구조 | ✅ |
+| 학습 효과 | 10점 | 등급별 학습 포인트 + 재도전으로 인과관계 체득 + 역사적 침수 사건 맥락 | ✅ |
